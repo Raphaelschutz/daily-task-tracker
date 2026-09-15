@@ -1,0 +1,60 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # config.js n'est pas versionné (il contient la clé partagée avec n8n).
+      # On le reconstruit ici depuis les secrets du dépôt.
+      - name: Generate config.js
+        env:
+          API_BASE: ${{ secrets.DTT_API_BASE }}
+          API_KEY: ${{ secrets.DTT_API_KEY }}
+          RECIPIENT: ${{ secrets.DTT_RECIPIENT }}
+          HISTORY_LIMIT: ${{ secrets.DTT_HISTORY_LIMIT }}
+        run: |
+          for v in API_BASE API_KEY RECIPIENT; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Secret DTT_$v manquant — voir README, section Déploiement."
+              exit 1
+            fi
+          done
+          node -e '
+            const fs = require("fs");
+            const cfg = {
+              apiBase: process.env.API_BASE,
+              apiKey: process.env.API_KEY,
+              recipient: process.env.RECIPIENT,
+              historyLimit: Number(process.env.HISTORY_LIMIT) || 60
+            };
+            fs.writeFileSync("config.js",
+              "// Généré au déploiement depuis les secrets du dépôt. Ne pas versionner.\n" +
+              "window.DTT_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
+          '
+          echo "config.js généré ($(wc -c < config.js) octets)"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -18,11 +18,28 @@ Puis renseigner `apiBase`, `apiKey` (identique aux nœuds Code du workflow n8n) 
 
 ## Déploiement (GitHub Pages)
 
-1. Settings → Pages → Source « Deploy from a branch », branche `main`, dossier `/ (root)`.
-2. Ouvrir l'URL Pages sur le téléphone → Partager → « Sur l'écran d'accueil ».
+Le déploiement est automatique : chaque push sur `main` déclenche
+[`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml), qui régénère
+`config.js` depuis les secrets du dépôt puis publie le site.
 
-`config.js` étant ignoré par Git, il faut le fournir au déploiement — par exemple via une GitHub Action qui l'écrit depuis un secret de dépôt avant la publication.
+Source à régler une seule fois : Settings → Pages → Source → **GitHub Actions**.
 
-**À noter** : cette PWA est entièrement côté client. Quel que soit le mode de déploiement, `config.js` est servi au navigateur, donc `apiKey` est lisible par tout visiteur du site. Elle protège le webhook contre les appels automatisés, pas contre quelqu'un qui ouvre la page. Pour un usage réellement privé, garder le dépôt et le site privés.
+Secrets requis (Settings → Secrets and variables → Actions) :
+
+| Secret | Rôle |
+| --- | --- |
+| `DTT_API_BASE` | URL de base des webhooks n8n |
+| `DTT_API_KEY` | clé `x-app-key`, identique aux nœuds Code du workflow |
+| `DTT_RECIPIENT` | destinataire du rapport |
+| `DTT_HISTORY_LIMIT` | nombre de jours d'historique (défaut 60) |
+
+Site publié : https://raphaelschutz.github.io/daily-task-tracker/ — l'ouvrir sur le
+téléphone → Partager → « Sur l'écran d'accueil ».
+
+**À noter** : cette PWA est entièrement côté client. `config.js` est servi au navigateur,
+donc `apiKey` reste lisible par tout visiteur du site. La garder hors du dépôt l'expose
+moins (les scanners de secrets GitHub ne la voient pas), mais elle ne protège le webhook
+que contre les appels automatisés, pas contre quelqu'un qui ouvre les DevTools.
+
 
 Après chaque modification des fichiers, incrémenter `VERSION` dans `sw.js` pour forcer la mise à jour du cache.
