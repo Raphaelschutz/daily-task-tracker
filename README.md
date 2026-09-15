@@ -4,7 +4,8 @@ PWA mobile minimaliste : tâches du jour, temps passé, rapport de fin de journ�
 
 - **Front** : `index.html`, `styles.css`, `app.js` — aucun build, installable sur l'écran d'accueil (iOS / Android), fonctionne hors ligne.
 - **Backend** : workflow n8n « Daily Task Tracker - API » (`POST /webhook/dtt/report`, `GET /webhook/dtt/history`), Data Tables `dtt_days` et `dtt_tasks`.
-- **Réglages** : `config.js` (URL n8n, clé `x-app-key`, destinataire).
+- **Réglages** : `config.js` (URL n8n, clé `x-app-key`, domaines email autorisés).
+- **Multi-utilisateurs** : chaque personne installe la même URL et renseigne prénom + email pro (⚙︎). Le rapport part vers cet email (domaine `@cryoport.com` uniquement, liste `ALLOWED_DOMAINS` dans le workflow n8n) et l'historique est propre à chacun.
 
 ## Configuration
 

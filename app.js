@@ -2,7 +2,8 @@
   'use strict';
 
   var CFG = window.DTT_CONFIG;
-  var KEYS = { day: 'dtt.day', pending: 'dtt.pending', history: 'dtt.history' };
+  var KEYS = { day: 'dtt.day', pending: 'dtt.pending', history: 'dtt.history', profile: 'dtt.profile' };
+  var ALLOWED_DOMAINS = (CFG.allowedDomains || ['cryoport.com']);
 
   /* ---------- Utils ---------- */
   function todayISO() {
@@ -57,6 +58,7 @@
     day: load(KEYS.day, null) || { date: todayISO(), tasks: [], sentAt: null },
     pending: load(KEYS.pending, null),
     history: load(KEYS.history, { days: [], loadedAt: null }),
+    profile: load(KEYS.profile, { name: '', email: '' }),
     view: 'home',
     sheet: null,
     sending: false,
@@ -66,6 +68,14 @@
   };
 
   function persistDay() { save(KEYS.day, state.day); }
+
+  function profileError(p) {
+    var email = String(p.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { return 'Adresse email invalide'; }
+    if (ALLOWED_DOMAINS.indexOf(email.split('@')[1]) === -1) { return 'Adresse @' + ALLOWED_DOMAINS.join(' ou @') + ' uniquement'; }
+    return null;
+  }
+  function hasProfile() { return !profileError(state.profile); }
 
   function rolloverIfNeeded() {
     var today = todayISO();
@@ -102,7 +112,7 @@
   }
 
   function apiHistory() {
-    return fetch(CFG.apiBase + '/dtt/history?limit=' + (CFG.historyLimit || 60), {
+    return fetch(CFG.apiBase + '/dtt/history?limit=' + (CFG.historyLimit || 60) + '&email=' + encodeURIComponent(state.profile.email), {
       headers: { 'x-app-key': CFG.apiKey }
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (!j.ok) { throw new Error(j.error || 'Erreur'); }
@@ -112,6 +122,8 @@
 
   function buildPayload(day) {
     return {
+      email: state.profile.email,
+      name: state.profile.name,
       date: day.date,
       tasks: day.tasks.map(function (t) {
         return { title: t.title, hours: t.hours || 0, minutes: t.minutes || 0, done: !!t.done, comment: t.comment || '' };
@@ -123,6 +135,7 @@
     if (state.sending) { return; }
     var day = state.day;
     if (!day.tasks.length) { toast('Ajoute au moins une tâche', true); return; }
+    if (!hasProfile()) { state.sheet = { type: 'profile', next: 'send' }; render(); return; }
     state.sending = true;
     render();
     var payload = buildPayload(day);
@@ -173,7 +186,7 @@
   }
 
   function refreshHistory(silent) {
-    if (state.historyLoading) { return; }
+    if (state.historyLoading || !hasProfile()) { return; }
     state.historyLoading = true;
     state.historyError = null;
     if (!silent) { render(); }
@@ -196,6 +209,10 @@
   function render() {
     app.innerHTML = state.view === 'history' ? viewHistory() : viewHome();
     sheetRoot.innerHTML = state.sheet ? viewSheet() : '';
+    if (state.sheet && state.sheet.type === 'profile' && !state.profile.email) {
+      var pin = sheetRoot.querySelector('[data-field="name"]');
+      if (pin) { setTimeout(function () { pin.focus(); }, 60); }
+    }
     if (state.sheet && state.sheet.type === 'edit') {
       var input = sheetRoot.querySelector('[data-field="title"]');
       if (input && !state.sheet.taskId) { setTimeout(function () { input.focus(); }, 60); }
@@ -215,6 +232,7 @@
     h += '</div><div style="display:flex;gap:8px;align-items:center">';
     h += '<div class="total-pill' + (total ? ' accent' : '') + '">' + label(total) + '</div>';
     h += '<button class="icon-btn" data-action="history" aria-label="Historique">' + icon('clock') + '</button>';
+    h += '<button class="icon-btn" data-action="profile" aria-label="Réglages">' + icon('user') + '</button>';
     h += '</div></header>';
 
     if (state.pending) {
@@ -262,6 +280,7 @@
     else if (s.type === 'sent') { h += sheetSent(s); }
     else if (s.type === 'confirm-new') { h += sheetConfirmNew(); }
     else if (s.type === 'confirm-delete') { h += sheetConfirmDelete(s); }
+    else if (s.type === 'profile') { h += sheetProfile(s); }
     h += '</div>';
     return h;
   }
@@ -305,7 +324,7 @@
     });
     h += '<div class="recap-total"><span>' + day.tasks.length + ' tâche' + (day.tasks.length > 1 ? 's' : '') + ' · ' + doneCount + ' terminée' + (doneCount > 1 ? 's' : '') + '</span><span class="t">' + label(total) + '</span></div>';
     h += '</div>';
-    h += '<p class="hint">Envoi à ' + esc(CFG.recipient) + '</p>';
+    h += '<p class="hint">Envoi à ' + esc(state.profile.email) + '</p>';
     h += '<div class="sheet-actions">';
     h += '<button class="btn btn-accent" data-action="send"' + (state.sending ? ' disabled' : '') + '>' + (state.sending ? '<span class="spinner"></span> Envoi…' : icon('send') + 'Confirmer l’envoi') + '</button>';
     h += '<button class="btn btn-ghost" data-action="close"' + (state.sending ? ' disabled' : '') + '>Annuler</button>';
@@ -315,12 +334,43 @@
 
   function sheetSent(s) {
     var h = '<div class="sent"><div class="ring">' + icon('check') + '</div>';
-    h += '<h2>Rapport envoyé</h2><div class="big">' + esc(s.totalLabel) + '</div><p>' + esc(CFG.recipient) + '</p>';
+    h += '<h2>Rapport envoyé</h2><div class="big">' + esc(s.totalLabel) + '</div><p>' + esc(state.profile.email) + '</p>';
     h += '<div class="sheet-actions">';
     h += '<button class="btn btn-primary" data-action="new-day">Nouvelle journée</button>';
     h += '<button class="btn btn-ghost" data-action="close">Garder cette journée</button>';
     h += '</div></div>';
     return h;
+  }
+
+  function sheetProfile(s) {
+    var p = state.profile;
+    var first = !hasProfile();
+    var h = '<h2>' + (first ? 'Bienvenue' : 'Réglages') + '</h2>';
+    if (first) { h += '<p class="hint">Ton rapport de journée sera envoyé à cette adresse.</p>'; }
+    h += '<div class="field"><span class="label">Prénom</span><input class="input" data-field="name" type="text" placeholder="Prénom" value="' + esc(p.name) + '" maxlength="60" autocomplete="given-name"></div>';
+    h += '<div class="field"><span class="label">Email professionnel</span><input class="input" data-field="email" type="email" inputmode="email" autocapitalize="off" autocomplete="email" placeholder="prenom@' + esc(ALLOWED_DOMAINS[0]) + '" value="' + esc(p.email) + '" maxlength="120"></div>';
+    h += '<div class="sheet-actions"><button class="btn btn-primary" data-action="save-profile">OK</button>';
+    if (!first) { h += '<button class="btn btn-ghost" data-action="close">Annuler</button>'; }
+    h += '</div>';
+    return h;
+  }
+
+  function saveProfile() {
+    var p = {
+      name: sheetRoot.querySelector('[data-field="name"]').value.replace(/\s+/g, ' ').trim(),
+      email: sheetRoot.querySelector('[data-field="email"]').value.trim().toLowerCase()
+    };
+    var err = profileError(p);
+    if (err) { toast(err, true); sheetRoot.querySelector('[data-field="email"]').focus(); return; }
+    var changed = p.email !== state.profile.email;
+    state.profile = p;
+    save(KEYS.profile, p);
+    if (changed) { state.history = { days: [], loadedAt: null }; save(KEYS.history, state.history); }
+    var next = state.sheet && state.sheet.next;
+    state.sheet = next === 'send' ? { type: 'send' } : null;
+    buzz();
+    render();
+    if (changed) { refreshHistory(true); }
   }
 
   function sheetConfirmNew() {
@@ -441,12 +491,14 @@
         buzz(5);
         break;
       }
-      case 'send-open': state.sheet = { type: 'send' }; render(); break;
+      case 'send-open': state.sheet = hasProfile() ? { type: 'send' } : { type: 'profile', next: 'send' }; render(); break;
+      case 'profile': state.sheet = { type: 'profile' }; render(); break;
+      case 'save-profile': saveProfile(); break;
       case 'send': sendReport(); break;
       case 'retry': retryPending(); break;
       case 'confirm-new': state.sheet = { type: 'confirm-new' }; render(); break;
       case 'new-day': startNewDay(); break;
-      case 'close': if (!state.sending) { state.sheet = null; render(); } break;
+      case 'close': if (!state.sending && !(state.sheet && state.sheet.type === 'profile' && !hasProfile())) { state.sheet = null; render(); } break;
       case 'history': state.view = 'history'; render(); refreshHistory(true); break;
       case 'home': state.view = 'home'; render(); break;
       case 'refresh-history': refreshHistory(false); break;
@@ -456,6 +508,7 @@
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && e.target.matches('[data-field="title"]')) { e.preventDefault(); saveTask(); }
+    if (e.key === 'Enter' && e.target.matches('[data-field="name"], [data-field="email"]')) { e.preventDefault(); saveProfile(); }
     if (e.key === 'Escape' && state.sheet && !state.sending) { state.sheet = null; render(); }
   });
 
@@ -466,6 +519,7 @@
 
   /* ---------- Boot ---------- */
   rolloverIfNeeded();
+  if (!hasProfile()) { state.sheet = { type: 'profile' }; }
   render();
   if (state.pending && navigator.onLine) { retryPending(); }
 

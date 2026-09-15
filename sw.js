@@ -1,5 +1,5 @@
 // Service worker : l'app fonctionne hors ligne, l'API n8n passe toujours par le réseau.
-var VERSION = 'dtt-v1';
+var VERSION = 'dtt-v2';
 var SHELL = ['./', './index.html', './styles.css', './app.js', './config.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {

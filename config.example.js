@@ -3,6 +3,6 @@
 window.DTT_CONFIG = {
   apiBase: 'https://exemple.n8n.cloud/webhook',
   apiKey: 'REMPLACER_PAR_VOTRE_CLE',
-  recipient: 'vous@exemple.com',
+  allowedDomains: ['cryoport.com'],
   historyLimit: 60
 };
